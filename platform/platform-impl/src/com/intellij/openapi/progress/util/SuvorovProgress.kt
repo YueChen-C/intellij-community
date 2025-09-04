@@ -11,6 +11,7 @@ import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.KeyboardShortcut
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.impl.InternalThreading
+import com.intellij.openapi.application.useDebouncedDrawingInSuvorovProgress
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.progress.util.ui.NiceOverlayUi
 import com.intellij.openapi.util.Disposer
@@ -20,6 +21,7 @@ import com.intellij.ui.KeyStrokeAdapter
 import com.intellij.ui.scale.JBUIScale
 import com.intellij.util.application
 import com.intellij.util.ui.AsyncProcessIcon
+import com.intellij.util.ui.GraphicsUtil
 import com.jetbrains.rd.util.error
 import com.jetbrains.rd.util.getLogger
 import kotlinx.coroutines.Deferred
@@ -111,7 +113,8 @@ object SuvorovProgress {
       }
       "NiceOverlay" -> {
         val currentFocusedPane = KeyboardFocusManager.getCurrentKeyboardFocusManager().focusedWindow?.let(SwingUtilities::getRootPane)
-        if (currentFocusedPane == null) {
+        // IJPL-203107 in remote development, there is no graphics for a component
+        if (currentFocusedPane == null || GraphicsUtil.safelyGetGraphics(currentFocusedPane) == null) {
           // can happen also in tests
           processInvocationEventsWithoutDialog(awaitedValue, Int.MAX_VALUE)
         }
@@ -163,11 +166,23 @@ object SuvorovProgress {
       }, disposable)
 
     repostAllEvents()
+    var oldTimestamp = System.currentTimeMillis()
     try {
       while (!awaitedValue.isCompleted) {
-        niceOverlay.redrawMainComponent()
-        stealer.dispatchEvents(0)
-        Thread.sleep(10)
+        if (useDebouncedDrawingInSuvorovProgress) {
+          val newTimestamp = System.currentTimeMillis()
+          if (newTimestamp - oldTimestamp >= 10) {
+            // we do not want to redraw the UI too frequently
+            oldTimestamp = newTimestamp
+            niceOverlay.redrawMainComponent()
+          }
+          stealer.dispatchEvents(10)
+        }
+        else {
+          niceOverlay.redrawMainComponent()
+          stealer.dispatchEvents(0)
+          Thread.sleep(10)
+        }
       }
     }
     finally {

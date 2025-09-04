@@ -121,6 +121,14 @@
                      language="kotlin" editorAttributes="NOT_USED_ELEMENT_ATTRIBUTES"
                      key="inspection.redundant.suspend.modifier.display.name" bundle="messages.KotlinBundle"/>
 
+    <localInspection implementationClass="org.jetbrains.kotlin.idea.codeInsight.inspections.shared.RedundantUpperBoundInspection"
+                     groupPath="Kotlin"
+                     groupBundle="messages.KotlinBundle" groupKey="group.names.redundant.constructs"
+                     enabledByDefault="true"
+                     level="WARNING" editorAttributes="NOT_USED_ELEMENT_ATTRIBUTES"
+                     language="kotlin"
+                     key="inspection.redundant.upper.bound.problem" bundle="messages.KotlinBundle"/>
+
     <localInspection
             implementationClass="org.jetbrains.kotlin.idea.codeInsight.inspections.shared.SimplifyNegatedBinaryExpressionInspection"
             groupPath="Kotlin"
@@ -650,6 +658,15 @@
                      language="kotlin"
                      key="inspection.suspicious.var.property.display.name" bundle="messages.KotlinBundle"/>
 
+    <localInspection implementationClass="org.jetbrains.kotlin.idea.codeInsight.inspections.shared.MigrateDiagnosticSuppressionInspection"
+                     groupPath="Kotlin"
+                     groupBundle="messages.KotlinBundle" groupKey="group.names.other.problems"
+                     enabledByDefault="true"
+                     cleanupTool="true"
+                     level="WARNING"
+                     language="kotlin"
+                     key="inspection.migrate.diagnostic.suppression.display.name" bundle="messages.KotlinBundle"/>
+
     <localInspection implementationClass="org.jetbrains.kotlin.idea.codeInsight.inspections.shared.SetterBackingFieldAssignmentInspection"
                      groupPath="Kotlin"
                      groupBundle="messages.KotlinBundle" groupKey="group.names.probable.bugs"
@@ -659,6 +676,14 @@
                      language="kotlin"
                      key="inspection.setter.backing.field.assignment.display.name" bundle="messages.KotlinBundle"/>
 
+    <localInspection implementationClass="org.jetbrains.kotlin.idea.codeInsight.inspections.shared.JavaCollectionsStaticMethodOnImmutableListInspection"
+                     groupPath="Kotlin"
+                     groupBundle="messages.KotlinBundle" groupKey="group.names.java.interop.issues"
+                     enabledByDefault="true"
+                     level="WARNING"
+                     language="kotlin"
+                     key="inspection.java.collections.static.method.on.immutable.list.display.name" bundle="messages.KotlinBundle"/>
+
     <localInspection implementationClass="org.jetbrains.kotlin.idea.codeInsight.inspections.shared.SuspiciousAsDynamicInspection"
                      groupPath="Kotlin"
                      groupBundle="messages.KotlinBundle" groupKey="group.names.style.issues"
@@ -667,5 +692,20 @@
                      language="kotlin"
                      key="inspection.suspicious.as.dynamic.display.name" bundle="messages.KotlinBundle"/>
 
+    <localInspection implementationClass="org.jetbrains.kotlin.idea.codeInsight.inspections.shared.ReplaceToStringWithStringTemplateInspection"
+                     groupPath="Kotlin"
+                     groupBundle="messages.KotlinBundle" groupKey="group.names.style.issues"
+                     enabledByDefault="true"
+                     level="INFORMATION"
+                     language="kotlin"
+                     key="inspection.replace.to.string.with.string.template.display.name" bundle="messages.KotlinBundle"/>
+
+    <localInspection implementationClass="org.jetbrains.kotlin.idea.codeInsight.inspections.shared.collections.ConvertCallChainIntoSequenceInspection"
+                     groupPath="Kotlin"
+                     groupBundle="messages.KotlinBundle" groupKey="group.names.style.issues"
+                     enabledByDefault="true"
+                     level="WEAK WARNING"
+                     language="kotlin"
+                     key="inspection.convert.call.chain.into.sequence.display.name" bundle="messages.KotlinBundle"/>
   </extensions>
 </idea-plugin>

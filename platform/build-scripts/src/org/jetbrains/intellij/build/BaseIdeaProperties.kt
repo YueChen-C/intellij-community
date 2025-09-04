@@ -47,7 +47,6 @@ val IDEA_BUNDLED_PLUGINS: PersistentList<String> = DEFAULT_BUNDLED_PLUGINS + seq
   "intellij.java.coverage",
   "intellij.java.decompiler",
   "intellij.eclipse",
-  "intellij.platform.langInjection.plugin",
   "intellij.java.debugger.streams",
   "intellij.sh.plugin",
   "intellij.markdown",
@@ -66,7 +65,7 @@ val IDEA_BUNDLED_PLUGINS: PersistentList<String> = DEFAULT_BUNDLED_PLUGINS + seq
 )
 
 val CE_CLASS_VERSIONS: Map<String, String> = mapOf(
-  "" to "17",
+  "" to "21",
   "lib/idea_rt.jar" to "1.8",
   "lib/forms_rt.jar" to "1.8",
   "lib/annotations.jar" to "1.8",

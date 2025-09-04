@@ -10,10 +10,13 @@ import com.intellij.openapi.ui.Divider
 import com.intellij.openapi.ui.Splittable
 import com.intellij.openapi.wm.IdeFrame
 import com.intellij.openapi.wm.IdeGlassPane
+import com.intellij.openapi.wm.impl.IdeFrameImpl
+import com.intellij.openapi.wm.impl.content.ContentLayout
 import com.intellij.toolWindow.StripesUxCustomizer
 import com.intellij.toolWindow.ToolWindowButtonManager
 import com.intellij.toolWindow.xNext.XNextStripesUxCustomizer
 import com.intellij.ui.JBColor
+import com.intellij.ui.tabs.JBTabPainter
 import com.intellij.ui.tabs.impl.JBTabsImpl
 import com.intellij.ui.tabs.impl.TabLabel
 import com.intellij.ui.tabs.impl.TabPainterAdapter
@@ -51,9 +54,15 @@ open class InternalUICustomization {
 
   open val editorTabPainterAdapter: TabPainterAdapter = EditorTabPainterAdapter()
 
+  open val commonTabPainterAdapter: TabPainterAdapter? = null
+
+  open val debuggerTabPainterAdapter: TabPainterAdapter? = null
+
   open val shouldPaintEditorFadeout: Boolean = true
 
   open val toolWindowUIDecorator: ToolWindowUIDecorator = ToolWindowUIDecorator()
+
+  open val toolWindowTabPainter: JBTabPainter = JBTabPainter.TOOL_WINDOW
 
   open val isProjectCustomDecorationActive: Boolean = true
 
@@ -75,6 +84,8 @@ open class InternalUICustomization {
     XNextStripesUxCustomizer()
   else
     StripesUxCustomizer()
+
+  open fun configureMainFrame(frame: IdeFrameImpl) {}
 
   open fun configureButtonLook(look: ActionButtonLook, g: Graphics): Graphics? = null
 
@@ -135,4 +146,10 @@ open class InternalUICustomization {
   open fun createProjectTab(frame: JFrame) {}
 
   open fun paintProjectTab(frame: JFrame, label: TabLabel, g: Graphics, tabs: JBTabsImpl, selected: Boolean, index: Int, lastIndex: Int): Boolean = false
+
+  open fun paintTab(g: Graphics, rect: Rectangle, hovered: Boolean, selected: Boolean): Boolean = false
+
+  open fun paintTabBorder(g: Graphics, tabPlacement: Int, tabIndex: Int, x: Int, y: Int, w: Int, h: Int, isSelected: Boolean): Boolean = false
+
+  open fun getTabLayoutStart(layout: ContentLayout): Int = 0
 }

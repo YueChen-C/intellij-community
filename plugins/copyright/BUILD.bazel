@@ -39,7 +39,7 @@ jvm_library(
 jvm_library(
   name = "copyright_test_lib",
   visibility = ["//visibility:public"],
-  srcs = glob(["testSrc/**/*.kt", "testSrc/**/*.java"], allow_empty = True),
+  srcs = glob(["testSrc/**/*.kt", "testSrc/**/*.java", "testSrc/**/*.form"], allow_empty = True),
   associates = [":copyright"],
   deps = [
     "//platform/analysis-api:analysis",
@@ -68,6 +68,10 @@ jvm_library(
     "@lib//:junit5",
     "//xml/xml-psi-api:psi",
     "//platform/util/jdom",
+    "//platform/testFramework/junit5",
+    "//platform/testFramework/junit5:junit5_test_lib",
+    "//platform/testFramework/junit5.jimfs",
+    "//platform/testFramework/junit5.jimfs:junit5.jimfs_test_lib",
   ],
   runtime_deps = [":copyright_resources"]
 )

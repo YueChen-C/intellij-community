@@ -33,6 +33,8 @@ kotlin {
     "-Xconsistent-data-class-copy-visibility",
     "-opt-in=kotlin.concurrent.atomics.ExperimentalAtomicApi",
     "-Xcontext-parameters",
+    "-Xwasm-kclass-fqn",
+    "-XXLanguage:+AllowEagerSupertypeAccessibilityChecks",
   )
   jvm {}
   wasmJs {

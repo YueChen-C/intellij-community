@@ -1422,45 +1422,71 @@ open class FileEditorManagerImpl(
     return openEditorImpl(descriptor = descriptor, focusEditor = focusEditor).first
   }
 
+  override suspend fun openFileEditorAsync(descriptor: FileEditorNavigatable, focusEditor: Boolean): List<FileEditor> {
+    return openEditorImplAsync(descriptor = descriptor, focusEditor = focusEditor).first
+  }
+
   /**
    * @return the list of opened editors, and the one of them that was selected (if any)
    */
   @RequiresEdt
   private fun openEditorImpl(descriptor: FileEditorNavigatable, focusEditor: Boolean): kotlin.Pair<List<FileEditor>, FileEditor?> {
-    val effectiveDescriptor: FileEditorNavigatable
-    if (descriptor is OpenFileDescriptor && descriptor.getFile() is VirtualFileWindow) {
+    val effectiveDescriptor = produceEffectiveDescriptor(descriptor)
+    val file = effectiveDescriptor.file
+
+    val composite: FileEditorComposite = openFile(file = file, window = null, options = effectiveDescriptor.toOpenOptions(focusEditor))
+
+    return navigateInComposite(composite, effectiveDescriptor) ?: (composite.allEditors to null)
+  }
+
+  private suspend fun openEditorImplAsync(descriptor: FileEditorNavigatable, focusEditor: Boolean): kotlin.Pair<List<FileEditor>, FileEditor?> {
+    val effectiveDescriptor = produceEffectiveDescriptor(descriptor)
+    val file = effectiveDescriptor.file
+
+    val composite: FileEditorComposite = openFile(file = file, options = effectiveDescriptor.toOpenOptions(focusEditor))
+
+    return withContext(Dispatchers.EDT) {
+      navigateInComposite(composite, effectiveDescriptor) ?: (composite.allEditors to null)
+    }
+  }
+
+  private fun produceEffectiveDescriptor(descriptor: FileEditorNavigatable): FileEditorNavigatable {
+    return if (descriptor is OpenFileDescriptor && descriptor.getFile() is VirtualFileWindow) {
       val delegate = descriptor.getFile() as VirtualFileWindow
       val hostOffset = delegate.documentWindow.injectedToHost(descriptor.offset)
       val fixedDescriptor = OpenFileDescriptor(descriptor.project, delegate.delegate, hostOffset)
       fixedDescriptor.isUseCurrentWindow = descriptor.isUseCurrentWindow()
       fixedDescriptor.isUsePreviewTab = descriptor.isUsePreviewTab()
-      effectiveDescriptor = fixedDescriptor
+      fixedDescriptor
     }
-    else {
-      effectiveDescriptor = descriptor
-    }
+    else descriptor
+  }
 
-    val file = effectiveDescriptor.file
-    val openOptions = FileEditorOpenOptions(
-      reuseOpen = !effectiveDescriptor.isUseCurrentWindow,
-      usePreviewTab = effectiveDescriptor.isUsePreviewTab,
+  private fun FileEditorNavigatable.toOpenOptions(focusEditor: Boolean): FileEditorOpenOptions {
+    return FileEditorOpenOptions(
+      reuseOpen = !isUseCurrentWindow,
+      usePreviewTab = isUsePreviewTab,
       requestFocus = focusEditor,
       openMode = getOpenMode(IdeEventQueue.getInstance().trueCurrentEvent),
     )
+  }
 
-    val composite: FileEditorComposite = openFile(file = file, window = null, options = openOptions)
+  @RequiresEdt
+  private fun navigateInComposite(
+    composite: FileEditorComposite,
+    effectiveDescriptor: FileEditorNavigatable,
+  ): kotlin.Pair<List<FileEditor>, FileEditor?>? {
+    if (composite !is EditorComposite) return null
     val fileEditors = composite.allEditors
-
-    if (composite is EditorComposite) {
-      for (editor in fileEditors) {
-        if (editor is NavigatableFileEditor &&
-            navigateAndSelectEditor(editor, effectiveDescriptor, composite)) {
-          return fileEditors to editor
-        }
+    for (editor in fileEditors) {
+      if (editor is NavigatableFileEditor &&
+          navigateAndSelectEditor(editor, effectiveDescriptor, composite)) {
+        return fileEditors to editor
       }
     }
-    return fileEditors to null
+    return null
   }
+
 
   override fun getProject(): Project = project
 
@@ -2184,6 +2210,7 @@ open class FileEditorManagerImpl(
     val tabs = mutableListOf<TabInfo>()
     val editorActionGroup = serviceAsync<ActionManager>().getAction("EditorTabActionGroup")
 
+    var tabToSelect: TabInfo? = null
     for (item in items) {
       val fileEntry = item.fileEntry
       val file = item.file
@@ -2197,7 +2224,11 @@ open class FileEditorManagerImpl(
           model = item.model,
           coroutineScope = item.scope,
         )
-      } ?: continue
+      }
+      if (composite == null) {
+        LOG.warn("Couldn't create composite for ${file.url}, file won't be reopened")
+        continue
+      }
 
       if (fileEntry.currentInTab || !isLazyComposite) {
         composite.initDeferred.complete(Unit)
@@ -2221,14 +2252,18 @@ open class FileEditorManagerImpl(
         item.customizer(tab)
       }
 
-      tabs.add(createTabInfo(
+      val tabInfo = createTabInfo(
         component = composite.component,
         file = file,
         parentDisposable = composite,
         window = window,
         editorActionGroup = editorActionGroup,
         customizer = customizer,
-      ))
+      )
+      tabs.add(tabInfo)
+      if (tabToSelect == null && fileEntry.currentInTab) {
+        tabToSelect = tabInfo
+      }
 
       val editorCompositeEntry = EditorCompositeEntry(composite = composite, delayedState = fileEntry)
       openedCompositeEntries.add(editorCompositeEntry)
@@ -2248,7 +2283,7 @@ open class FileEditorManagerImpl(
     }
 
     window.selectTabOnStartup(
-      tab = tabs.get(max(items.indexOfFirst { it.fileEntry.currentInTab }, 0)),
+      tab = tabToSelect ?: tabs.first(),
       requestFocus = requestFocus,
       windowAdded = windowAdded,
     )

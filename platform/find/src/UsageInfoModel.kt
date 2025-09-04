@@ -22,6 +22,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.NlsContexts
 import com.intellij.openapi.util.Segment
 import com.intellij.openapi.util.TextRange
+import com.intellij.openapi.vfs.ContentPreloadable
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.findDocument
 import com.intellij.psi.*
@@ -57,7 +58,7 @@ internal class UsageInfoModel private constructor(val project: Project, val mode
   private var cachedUsageInfos: List<UsageInfo> = emptyList()
     get() {
       if (field.isEmpty()) {
-        LOG.warn("UsageInfos are not yet initialized for ${model.presentablePath}")
+        LOG.debug("UsageInfos are not yet initialized for ${model.presentablePath}")
       }
       return field
     }
@@ -96,7 +97,7 @@ internal class UsageInfoModel private constructor(val project: Project, val mode
     if (model.usageInfos.isNotEmpty()) {
       cachedUsageInfos = model.usageInfos
       cachedPsiFile = cachedUsageInfos.firstOrNull()?.file
-      cachedMergedSmartRanges = cachedUsageInfos.map { it.psiFileRange }.sortedBy { it.range?.startOffset ?: 0 }
+      cachedMergedSmartRanges = cachedUsageInfos.mapNotNull { it.psiFileRange }.sortedBy { it.range?.startOffset ?: 0 }
       cachedSmartRange = cachedMergedSmartRanges.firstOrNull()
       isLoaded = true
     }
@@ -115,6 +116,12 @@ internal class UsageInfoModel private constructor(val project: Project, val mode
           if (virtualFile?.isValid == false) {
             LOG.warn("VirtualFile is invalid for ${model.presentablePath}")
             return@launch
+          }
+
+          (virtualFile as? ContentPreloadable)?.let { file ->
+            LOG.runAndLogException {
+              file.preloadContent()
+            }
           }
 
           readAction {
@@ -163,7 +170,7 @@ internal class UsageInfoModel private constructor(val project: Project, val mode
   }
 
   private fun getMergedRanges(): List<TextRange> {
-    return if (cachedMergedSmartRanges.isEmpty()) defaultMergedRanges
+    return if (cachedMergedSmartRanges.size < defaultMergedRanges.size) defaultMergedRanges
     else cachedMergedSmartRanges
       .mapNotNull { smartRange ->
         smartRange.range?.let { TextRange(it.startOffset, it.endOffset) }

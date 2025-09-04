@@ -49,6 +49,7 @@ fun parse(
   languageMapper: SyntaxElementLanguageProvider,
   cancellationProvider: CancellationProvider? = null,
   logger: Logger? = null,
+  tokenizationPolicy: TokenizationPolicy = defaultTokenizationPolicy(logger),
   whitespaceOrCommentBindingPolicy: WhitespaceOrCommentBindingPolicy? = DefaultWhitespaceBindingPolicy,
 ): KmpSyntaxNode {
   fun createBuilder(
@@ -64,32 +65,8 @@ fun parse(
     .withStartOffset(startLexemeOffset)
     .build()
 
-  fun performLexingImpl(
-    text: CharSequence,
-    lexer: Lexer,
-    cancellationProvider: CancellationProvider?,
-    logger: Logger?,
-  ): TokenList {
-    val result = performLexing(
-      text,
-      lexer,
-      cancellationProvider,
-      logger,
-    )
-    val isEmpty = result.tokenCount == 0
-    return if (isEmpty) buildTokenList {
-      token("", SyntaxTokenTypes.WHITE_SPACE)
-    }
-    else result
-  }
-
   val lexer = lexerFactory()
-  val tokens = performLexingImpl(
-    text,
-    lexer,
-    cancellationProvider,
-    logger,
-  )
+  val tokens = tokenizationPolicy.tokenize(text, lexer, cancellationProvider)
   val builder = createBuilder(text, tokens)
   parser(builder)
   val markers = builder.toAstMarkers()
@@ -98,13 +75,25 @@ fun parse(
     markers,
     tokens = builder.tokens,
     languageProvider = languageMapper,
-    tokenizationPolicy = TokenizationPolicy { text, lexer, cancellation ->
-      performLexingImpl(text, lexer, cancellation, logger)
-    },
+    tokenizationPolicy = tokenizationPolicy,
     lexer = lexer,
     builderFactory = SyntaxBuilderFactory { text, tokens, startLexeme ->
       createBuilder(text, tokens, startLexeme)
     },
     extensions = ::currentExtensionSupport
   )
+}
+
+fun defaultTokenizationPolicy(logger: Logger?): TokenizationPolicy = TokenizationPolicy { text, lexer, cancellation ->
+  performLexing(text, lexer, cancellation, logger)
+}
+
+@Deprecated("to be moved to Fleet codebase")
+fun fleetTokenizationPolicy(logger: Logger?): TokenizationPolicy = TokenizationPolicy { text, lexer, cancellation ->
+  val result = performLexing(text, lexer, cancellation, logger)
+  val isEmpty = result.tokenCount == 0
+  when (isEmpty) {
+    true -> buildTokenList { token("", SyntaxTokenTypes.WHITE_SPACE) }
+    false -> result
+  }
 }

@@ -19,22 +19,32 @@ import com.intellij.openapi.util.registry.Registry
 import com.intellij.openapi.wm.*
 import com.intellij.openapi.wm.ex.ToolWindowManagerEx
 import com.intellij.openapi.wm.impl.*
+import com.intellij.openapi.wm.impl.content.ContentLayout
+import com.intellij.openapi.wm.impl.customFrameDecorations.header.CustomHeader
 import com.intellij.openapi.wm.impl.customFrameDecorations.header.CustomWindowHeaderUtil
+import com.intellij.openapi.wm.impl.customFrameDecorations.header.MacToolbarFrameHeader
+import com.intellij.openapi.wm.impl.status.IdeStatusBarImpl
 import com.intellij.toolWindow.ToolWindowButtonManager
 import com.intellij.toolWindow.ToolWindowPaneNewButtonManager
+import com.intellij.toolWindow.ToolWindowToolbar
 import com.intellij.toolWindow.xNext.island.XNextIslandHolder
 import com.intellij.ui.*
 import com.intellij.ui.paint.LinePainter2D
 import com.intellij.ui.scale.JBUIScale
+import com.intellij.ui.tabs.JBTabPainter
+import com.intellij.ui.tabs.JBTabsPosition
 import com.intellij.ui.tabs.impl.JBEditorTabs
 import com.intellij.ui.tabs.impl.JBTabsImpl
 import com.intellij.ui.tabs.impl.TabLabel
+import com.intellij.util.ui.JBInsets
 import com.intellij.util.ui.JBSwingUtilities
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
 import java.awt.*
 import java.awt.event.AWTEventListener
 import java.awt.event.HierarchyEvent
+import java.awt.event.WindowAdapter
+import java.awt.event.WindowEvent
 import java.awt.geom.Area
 import java.awt.geom.RoundRectangle2D
 import javax.swing.JComponent
@@ -73,9 +83,15 @@ internal class IslandsUICustomization : InternalUICustomization() {
     isIslandsGradientEnabledCache = null
   }
 
-  override val isProjectCustomDecorationGradientPaint: Boolean = !isManyIslandEnabled || !isIslandsGradientEnabled
+  override val isProjectCustomDecorationGradientPaint: Boolean
+    get() {
+      return !isManyIslandEnabled
+    }
 
-  override val shouldPaintEditorFadeout: Boolean = !isManyIslandEnabled
+  override val shouldPaintEditorFadeout: Boolean
+    get() {
+      return !isManyIslandEnabled
+    }
 
   override val toolWindowUIDecorator: ToolWindowUIDecorator = object : ToolWindowUIDecorator() {
     override fun decorateAndReturnHolder(divider: JComponent, child: JComponent, toolWindow: ToolWindow, originalBorderBuilder: () -> Border): JComponent {
@@ -147,11 +163,19 @@ internal class IslandsUICustomization : InternalUICustomization() {
 
   private fun enableManyIslands() {
     editorTabPainterAdapter.isEnabled = true
+    commonTabPainterAdapter.isEnabled = true
+    debuggerTabPainterAdapter.isEnabled = true
 
     // XXX: dialogs
 
-    for (frame in WindowManager.getInstance().allProjectFrames) {
-      UIUtil.forEachComponentInHierarchy(frame.component) {
+    for (frameHelper in WindowManager.getInstance().allProjectFrames) {
+      if (frameHelper is ProjectFrameHelper) {
+        configureMainFrame(frameHelper.frame, true)
+      }
+
+      UIUtil.forEachComponentInHierarchy(frameHelper.component) {
+        configureMainFrameChildren(it, true)
+
         when (it) {
           is EditorsSplitters -> {
             createEditorBorderPainter(it)
@@ -168,7 +192,7 @@ internal class IslandsUICustomization : InternalUICustomization() {
         }
       }
 
-      val project = frame.project
+      val project = frameHelper.project
       if (project != null) {
         val manager = ToolWindowManager.getInstance(project) as ToolWindowManagerEx
         updateToolStripesVisibility(manager)
@@ -187,11 +211,19 @@ internal class IslandsUICustomization : InternalUICustomization() {
 
   private fun disableManyIslands() {
     editorTabPainterAdapter.isEnabled = false
+    commonTabPainterAdapter.isEnabled = false
+    debuggerTabPainterAdapter.isEnabled = false
 
     // XXX: dialogs
 
-    for (frame in WindowManager.getInstance().allProjectFrames) {
-      UIUtil.forEachComponentInHierarchy(frame.component) {
+    for (frameHelper in WindowManager.getInstance().allProjectFrames) {
+      if (frameHelper is ProjectFrameHelper) {
+        configureMainFrame(frameHelper.frame, false)
+      }
+
+      UIUtil.forEachComponentInHierarchy(frameHelper.component) {
+        configureMainFrameChildren(it, false)
+
         if (it is JComponent) {
           ClientProperty.removeRecursive(it, IdeBackgroundUtil.NO_BACKGROUND)
         }
@@ -206,7 +238,7 @@ internal class IslandsUICustomization : InternalUICustomization() {
         }
       }
 
-      val project = frame.project
+      val project = frameHelper.project
       if (project != null) {
         val manager = ToolWindowManager.getInstance(project) as ToolWindowManagerEx
         updateToolStripesVisibility(manager)
@@ -317,7 +349,68 @@ internal class IslandsUICustomization : InternalUICustomization() {
     }
   }
 
-  override fun createCustomDivider(isVertical: Boolean, splitter: Splittable): Divider? {
+  private val inactivePainter = object : DefaultBorderPainter() {
+    override fun paintAfterChildren(component: JComponent, g: Graphics) {
+      val window = UIUtil.getWindow(component) ?: return
+      if (!window.isActive) {
+        val alphaKey = if (component is IdeStatusBarImpl) "Island.inactiveAlphaInStatusBar" else "Island.inactiveAlpha"
+
+        g as Graphics2D
+        g.color = getMainBackgroundColor()
+        g.composite = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, JBUI.getFloat(alphaKey, 0.5f))
+
+        g.fillRect(0, 0, component.width, component.height)
+      }
+    }
+  }
+
+  private val frameActiveListener = object : WindowAdapter() {
+    override fun windowActivated(e: WindowEvent) {
+      e.window?.repaint()
+    }
+
+    override fun windowDeactivated(e: WindowEvent) {
+      e.window?.repaint()
+    }
+  }
+
+  override fun configureMainFrame(frame: IdeFrameImpl) {
+    if (isManyIslandEnabled) {
+      configureMainFrame(frame, true)
+
+      UIUtil.forEachComponentInHierarchy(frame.component) {
+        configureMainFrameChildren(it, true)
+      }
+    }
+  }
+
+  private fun configureMainFrame(frame: IdeFrameImpl, install: Boolean) {
+    if (install) {
+      frame.addWindowListener(frameActiveListener)
+    }
+    else {
+      frame.removeWindowListener(frameActiveListener)
+    }
+  }
+
+  private fun configureMainFrameChildren(component: Component, install: Boolean) {
+    when (component) {
+      is ToolWindowToolbar -> {
+        component.borderPainter = if (install) inactivePainter else DefaultBorderPainter()
+      }
+      is CustomHeader -> {
+        component.borderPainter = if (install) inactivePainter else DefaultBorderPainter()
+      }
+      is MacToolbarFrameHeader -> {
+        component.borderPainter = if (install) inactivePainter else DefaultBorderPainter()
+      }
+      is IdeStatusBarImpl -> {
+        component.borderPainter = if (install) inactivePainter else DefaultBorderPainter()
+      }
+    }
+  }
+
+  override fun createCustomDivider(isVertical: Boolean, splitter: Splittable): Divider {
     return ManyIslandDivider(isVertical, splitter).also {
       it.configure(isManyIslandEnabled)
     }
@@ -405,6 +498,7 @@ internal class IslandsUICustomization : InternalUICustomization() {
       gg.color = getMainBackgroundColor()
       gg.fill(shape)
 
+      gg.color = JBColor.namedColor("Island.borderColor", getMainBackgroundColor())
       gg.stroke = BasicStroke(JBUIScale.scale(1f), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)
       gg.draw(border)
     }
@@ -415,7 +509,58 @@ internal class IslandsUICustomization : InternalUICustomization() {
     }
   }
 
-  override val editorTabPainterAdapter: IslandsTabPainterAdapter = IslandsTabPainterAdapter(isManyIslandEnabled)
+  override val editorTabPainterAdapter: IslandsTabPainterAdapter = IslandsTabPainterAdapter(false, false, isManyIslandEnabled)
+
+  override val toolWindowTabPainter: IslandsTabPainter = object : IslandsTabPainter(false) {
+    private val defaultPainter = JBTabPainter.TOOL_WINDOW
+
+    override fun paintTab(position: JBTabsPosition, g: Graphics2D, rect: Rectangle, borderThickness: Int, tabColor: Color?, active: Boolean, hovered: Boolean) {
+      if (isManyIslandEnabled) {
+        super.paintTab(position, g, rect, borderThickness, tabColor, active, hovered)
+      }
+      else {
+        defaultPainter.paintTab(position, g, rect, borderThickness, tabColor, active, hovered)
+      }
+    }
+
+    override fun paintSelectedTab(position: JBTabsPosition, g: Graphics2D, rect: Rectangle, borderThickness: Int, tabColor: Color?, active: Boolean, hovered: Boolean) {
+      if (isManyIslandEnabled) {
+        super.paintSelectedTab(position, g, rect, borderThickness, tabColor, active, hovered)
+      }
+      else {
+        defaultPainter.paintSelectedTab(position, g, rect, borderThickness, tabColor, active, hovered)
+      }
+    }
+
+    override fun paintTab(g: Graphics2D, rect: Rectangle, tabColor: Color?, active: Boolean, hovered: Boolean, selected: Boolean) {
+      JBInsets.removeFrom(rect, JBInsets(6, 4, 6, 4))
+      g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+      super.paintTab(g, rect, tabColor, active, hovered, selected)
+    }
+  }
+
+  override val commonTabPainterAdapter: IslandsTabPainterAdapter = IslandsTabPainterAdapter(true, false, isManyIslandEnabled)
+
+  override val debuggerTabPainterAdapter: IslandsTabPainterAdapter = IslandsTabPainterAdapter(true, true, isManyIslandEnabled)
+
+  override fun paintTab(g: Graphics, rect: Rectangle, hovered: Boolean, selected: Boolean): Boolean {
+    if (isManyIslandEnabled) {
+      toolWindowTabPainter.paintTab(g as Graphics2D, rect, null, true, hovered, selected)
+      return true
+    }
+    return true
+  }
+
+  override fun paintTabBorder(g: Graphics, tabPlacement: Int, tabIndex: Int, x: Int, y: Int, w: Int, h: Int, isSelected: Boolean): Boolean {
+    return isManyIslandEnabled
+  }
+
+  override fun getTabLayoutStart(layout: ContentLayout): Int {
+    if (isManyIslandEnabled && !layout.isIdVisible) {
+      return JBUI.scale(4)
+    }
+    return 0
+  }
 
   private fun getMainBackgroundColor(): Color {
     return JBColor.namedColor("MainWindow.background", JBColor.PanelBackground)

@@ -29,9 +29,9 @@ interface GrazieCloudConnector {
   fun isAfterRecentGecError(): Boolean
 
   /**
-   * Rephrases the given [text] at the given [ranges] in the given [language].
+   * Rephrases the given [text] at the given [range] in the given [language].
    */
-  fun rephrase(text: String, ranges: List<TextRange>, language: Language, project: Project): List<String>?
+  fun rephrase(text: String, range: TextRange, language: Language, project: Project): List<String>?
 
   /**
    * Marks [sentences] with Named Entity Recognition Annotations for the given [language].
@@ -52,8 +52,5 @@ interface GrazieCloudConnector {
     val EP_NAME = ExtensionPointName<GrazieCloudConnector>("com.intellij.grazie.cloudConnector")
 
     fun seemsCloudConnected(): Boolean = EP_NAME.extensionList.any { it.seemsCloudConnected() }
-
-    fun subscribeToAuthorizationStateEvents(disposable: Disposable, listener: () -> Unit): Unit =
-      EP_NAME.forEachExtensionSafe { it.subscribeToAuthorizationStateEvents(disposable, listener) }
   }
 }

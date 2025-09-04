@@ -4,6 +4,7 @@
 package org.jetbrains.intellij.build.bazel
 
 import com.intellij.openapi.util.NlsSafe
+import com.intellij.util.containers.MultiMap
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap
 import org.jetbrains.jps.model.JpsProject
 import org.jetbrains.jps.model.java.JavaResourceRootProperties
@@ -25,10 +26,8 @@ import org.jetbrains.kotlin.jps.model.JpsKotlinFacetModuleExtension
 import java.nio.file.Path
 import java.util.IdentityHashMap
 import java.util.TreeMap
-import kotlin.io.path.extension
 import kotlin.io.path.invariantSeparatorsPathString
 import kotlin.io.path.relativeTo
-import kotlin.io.path.walk
 import kotlin.reflect.KProperty1
 import kotlin.reflect.full.memberProperties
 import kotlin.reflect.jvm.javaField
@@ -64,7 +63,7 @@ internal data class CustomModuleDescription(
   }
 }
 
-internal val customModules: Map<String, CustomModuleDescription> = listOf(
+internal val DEFAULT_CUSTOM_MODULES: Map<String, CustomModuleDescription> = listOf(
   CustomModuleDescription(moduleName = "intellij.idea.community.build.zip", bazelPackage = "@community//build", bazelTargetName = "zip",
                           outputDirectory = "out/bazel-out/jvm-fastbuild/bin/external/community+/build"),
   CustomModuleDescription(moduleName = "intellij.platform.jps.build.dependencyGraph", bazelPackage = "@community//build", bazelTargetName = "dependency-graph",
@@ -81,6 +80,7 @@ internal class BazelBuildFileGenerator(
   val communityRoot: Path,
   private val project: JpsProject,
   val urlCache: UrlCache,
+  val customModules: Map<String, CustomModuleDescription>,
 ) {
   @JvmField
   val javaExtensionService: JpsJavaExtensionService = JpsJavaExtensionService.getInstance()
@@ -161,9 +161,9 @@ internal class BazelBuildFileGenerator(
 
   private val providedLibraries: ProvidedLibraries = ProvidedLibraries()
   class ProvidedLibraries() {
-    private val providedLibraries: MutableSet<Library> = mutableSetOf()
-    fun isProvided(library: Library): Boolean = providedLibraries.contains(library)
-    fun markAsProvided(library: Library) { providedLibraries.add(library) }
+    private val providedLibraries: MultiMap<Library, LibraryContainer> = MultiMap()
+    fun getProvidedContexts(library: Library): Collection<LibraryContainer> = providedLibraries[library]
+    fun markAsProvided(library: Library, container: LibraryContainer) { providedLibraries.putValue(library, container) }
   }
 
   private val generated = IdentityHashMap<ModuleDescriptor, Boolean>()
@@ -200,7 +200,7 @@ internal class BazelBuildFileGenerator(
   ) {
     val fileToLabelTracker = LinkedHashMap<Path, MutableSet<String>>()
     val fileToUpdater = LinkedHashMap<Path, BazelFileUpdater>()
-    for ((owner, list) in mavenLibraries
+    for ((libraryContainer, list) in mavenLibraries
       .values
       .groupByTo(
       destination = TreeMap(
@@ -211,7 +211,7 @@ internal class BazelBuildFileGenerator(
       ),
       keySelector = { it.target.container },
     )) {
-      val bazelFileUpdater = fileToUpdater.computeIfAbsent(owner.buildFile) {
+      val bazelFileUpdater = fileToUpdater.computeIfAbsent(libraryContainer.buildFile) {
         val updater = BazelFileUpdater(it)
         updater.removeSections("maven-libs")
         updater.removeSections("maven libs")
@@ -222,8 +222,8 @@ internal class BazelBuildFileGenerator(
 
       val groupedByTargetName = sortedList.groupBy { it.target.targetName }
 
-      val labelTracker = fileToLabelTracker.computeIfAbsent(owner.moduleFile) { HashSet() }
-      buildFile(out = bazelFileUpdater, sectionName = owner.sectionName) {
+      val labelTracker = fileToLabelTracker.computeIfAbsent(libraryContainer.moduleFile) { HashSet() }
+      buildFile(out = bazelFileUpdater, sectionName = libraryContainer.sectionName) {
         load("@rules_jvm//:jvm.bzl", "jvm_import")
 
         for (entry in groupedByTargetName) {
@@ -231,13 +231,38 @@ internal class BazelBuildFileGenerator(
           if (libs.size > 1) {
             throw IllegalStateException("More than one versions: $entry")
           }
-          generateMavenLib(lib = libs.single(), labelTracker = labelTracker, isLibraryProvided = providedLibraries::isProvided, libVisibility = owner.visibility)
+          generateMavenLib(
+            lib = libs.single(),
+            labelTracker = labelTracker,
+            isLibraryProvided = { providedLibraries.getProvidedContexts(it).contains(libraryContainer) },
+            libVisibility = libraryContainer.visibility,
+          )
+        }
+
+        // provided libraries which are defined in community
+        // but used as provided libraries in the ultimate part
+        if (libraryContainer == ultimateLibraries) {
+          val communityLibrariesWithProvidedUsagesInUltimate = mavenLibraries
+            .values
+            .filter {
+              it.target.container == communityLibraries &&
+              providedLibraries.getProvidedContexts(it).contains(ultimateLibraries)
+            }
+            .sortedBy { it.target.targetName }
+
+          for (lib in communityLibrariesWithProvidedUsagesInUltimate) {
+            generateProvidedMavenLib(
+              lib = lib,
+              libVisibility = libraryContainer.visibility,
+              targetContainer = communityLibraries,
+            )
+          }
         }
       }
 
       generateBazelModuleSectionsForLibs(
         list = sortedList,
-        owner = owner,
+        owner = libraryContainer,
         jarRepositories = jarRepositories,
         m2Repo = m2Repo,
         urlCache = urlCache,
@@ -246,7 +271,15 @@ internal class BazelBuildFileGenerator(
       )
     }
 
-    generateLocalLibs(libs = localLibraries.values, isLibraryProvided = providedLibraries::isProvided, fileToUpdater = fileToUpdater)
+    generateLocalLibs(
+      libs = localLibraries.values,
+      isLibraryProvided = { lib ->
+        providedLibraries
+          .getProvidedContexts(lib)
+          .contains(lib.target.container)
+      },
+      fileToUpdater = fileToUpdater,
+    )
 
     for (updater in fileToUpdater.values) {
       updater.save()
@@ -258,7 +291,7 @@ internal class BazelBuildFileGenerator(
       val communityLibrary = mavenLibraries[LibraryKey(communityLibraries, lib.target.targetName)]
       if (communityLibrary != null) {
         if (isProvided) {
-          providedLibraries.markAsProvided(communityLibrary)
+          providedLibraries.markAsProvided(communityLibrary, ultimateLibraries)
         }
         return communityLibrary
       }
@@ -266,7 +299,7 @@ internal class BazelBuildFileGenerator(
 
     val internedLib = mavenLibraries.computeIfAbsent(LibraryKey(lib.target.container, lib.target.targetName)) { lib }
     if (isProvided) {
-      providedLibraries.markAsProvided(internedLib)
+      providedLibraries.markAsProvided(internedLib, internedLib.target.container)
     }
     return internedLib
   }
@@ -274,7 +307,7 @@ internal class BazelBuildFileGenerator(
   fun addLocalLibrary(lib: LocalLibrary, isProvided: Boolean): LocalLibrary {
     val internedLib = localLibraries.computeIfAbsent(LibraryKey(lib.target.container, lib.target.targetName)) { lib }
     if (isProvided) {
-      providedLibraries.markAsProvided(internedLib)
+      providedLibraries.markAsProvided(internedLib, internedLib.target.container)
     }
     return internedLib
   }
@@ -486,7 +519,7 @@ internal class BazelBuildFileGenerator(
     val module = moduleDescriptor.module
     val jvmTarget = getLanguageLevel(module)
     val kotlincOptionsLabel = computeKotlincOptions(buildFile = this, module = moduleDescriptor, jvmTarget = jvmTarget)
-                              ?: (if (jvmTarget == "17") null else "@community//:k$jvmTarget")
+                              ?: (if (jvmTarget == "21") null else "@community//:k$jvmTarget")
     val javacOptionsLabel = computeJavacOptions(moduleDescriptor, jvmTarget)
 
     val resourceTargets = mutableListOf<BazelLabel>()
@@ -756,7 +789,7 @@ internal class BazelBuildFileGenerator(
     target("kt_javac_options") {
       option("name", customJavacOptionsName)
       // release is not compatible with --add-exports (*** java)
-      require(jvmTarget == "17")
+      require(jvmTarget == "21")
       option("x_ep_disable_all_checks", true)
       option("warn", "off")
       option("add_exports", exports)
@@ -772,9 +805,39 @@ internal class BazelBuildFileGenerator(
       languageLevel == LanguageLevel.JDK_1_8 -> "8"
       languageLevel == LanguageLevel.JDK_11 -> "11"
       languageLevel == LanguageLevel.JDK_17 -> "17"
+      languageLevel == LanguageLevel.JDK_21 -> "21"
       languageLevel != null -> error("Unsupported language level: $languageLevel")
-      else -> "17"
+      else -> "21"
     }
+  }
+
+  private fun jpsModuleNameToBazelBuildName(module: JpsModule, baseBuildDir: Path, communityRoot: Path, ultimateRoot: Path?): @NlsSafe String {
+    val moduleName = module.name
+    val customModule = customModules.get(moduleName)
+    if (customModule != null) {
+      return customModule.bazelTargetName
+    }
+
+    val baseDirFilename = if (baseBuildDir == communityRoot || baseBuildDir == ultimateRoot) null else baseBuildDir.fileName.toString()
+    if (baseDirFilename != null && baseDirFilename != "resources" &&
+        (moduleName.endsWith(".$baseDirFilename") || (camelToSnakeCase(moduleName, '-')).endsWith(".$baseDirFilename"))) {
+      return baseDirFilename
+    }
+
+    val result = moduleName
+      .removePrefix("intellij.platform.")
+      .removePrefix("intellij.idea.community.")
+      .removePrefix("intellij.")
+
+    val parentDirDirName = when {
+      baseBuildDir == ultimateRoot -> null
+      baseBuildDir.parent == ultimateRoot -> "idea"
+      else -> baseBuildDir.parent.fileName.toString()
+    }
+
+    return result
+      .let { if (parentDirDirName != null) it.removePrefix("$parentDirDirName.") else it }
+      .replace('.', '-')
   }
 }
 
@@ -818,7 +881,7 @@ private fun computeSources(module: JpsModule, contentRoots: List<Path>, bazelBui
       }
 
       if (type == JavaSourceRootType.SOURCE || type == JavaSourceRootType.TEST_SOURCE) {
-        if (!(root.properties as JavaSourceRootProperties).isForGeneratedSources && rootDir.walk().any { it.extension == "form" }) {
+        if (!(root.properties as JavaSourceRootProperties).isForGeneratedSources) {
           sequenceOf(SourceDirDescriptor(glob = listOf("$prefix**/*.kt", "$prefix**/*.java", "$prefix**/*.form"), excludes = excludes))
         }
         else {
@@ -868,35 +931,6 @@ private fun isUsed(
 ): Boolean {
   return deps.depsModuleSet.contains(referencedModule) ||
          deps.runtimeDepsModuleSet.contains(referencedModule)
-}
-
-private fun jpsModuleNameToBazelBuildName(module: JpsModule, baseBuildDir: Path, communityRoot: Path, ultimateRoot: Path?): @NlsSafe String {
-  val moduleName = module.name
-  val customModule = customModules.get(moduleName)
-  if (customModule != null) {
-    return customModule.bazelTargetName
-  }
-
-  val baseDirFilename = if (baseBuildDir == communityRoot || baseBuildDir == ultimateRoot) null else baseBuildDir.fileName.toString()
-  if (baseDirFilename != null && baseDirFilename != "resources" &&
-      (moduleName.endsWith(".$baseDirFilename") || (camelToSnakeCase(moduleName, '-')).endsWith(".$baseDirFilename"))) {
-    return baseDirFilename
-  }
-
-  val result = moduleName
-    .removePrefix("intellij.platform.")
-    .removePrefix("intellij.idea.community.")
-    .removePrefix("intellij.")
-
-  val parentDirDirName = when {
-    baseBuildDir == ultimateRoot -> null
-    baseBuildDir.parent == ultimateRoot -> "idea"
-    else -> baseBuildDir.parent.fileName.toString()
-  }
-
-  return result
-    .let { if (parentDirDirName != null) it.removePrefix("$parentDirDirName.") else it }
-    .replace('.', '-')
 }
 
 private fun checkAndGetRelativePath(parentDir: Path, childDir: Path): Path {
@@ -963,7 +997,7 @@ private fun computeKotlincOptions(buildFile: BuildFile, module: ModuleDescriptor
   handleArgument(K2JVMCompilerArguments::pluginOptions) { pluginOptions ->
     if (pluginOptions?.isNotEmpty() == true) {
       options.put("plugin_options", pluginOptions.map {
-        it.replace("${module.bazelBuildFileDir.invariantSeparatorsPathString}/", "")
+        it.replace("${module.bazelBuildFileDir.invariantSeparatorsPathString}/", "${'$'}BASE_DIR$/${module.relativePathFromProjectRoot.invariantSeparatorsPathString}/")
       })
     }
   }
@@ -1079,8 +1113,8 @@ private fun computeKotlincOptions(buildFile: BuildFile, module: ModuleDescriptor
     module.module,
     mergedCompilerArguments,
     handledArguments = handledArguments + setOf("jvmTarget", "pluginClasspaths"),
-    handledInternalArguments = setOf("-XXLanguage:+InlineClasses"),
-    handledUnknownExtraFlags = setOf("-Xallow-result-return-type", "-Xstrict-java-nullability-assertions", "-Xwasm-attach-js-exception"),
+    handledInternalArguments = setOf("-XXLanguage:+InlineClasses", "-XXLanguage:+AllowEagerSupertypeAccessibilityChecks"),
+    handledUnknownExtraFlags = setOf("-Xallow-result-return-type", "-Xstrict-java-nullability-assertions", "-Xwasm-attach-js-exception", "-Xwasm-kclass-fqn"),
   )
 
   if (options.isEmpty()) {
@@ -1092,7 +1126,7 @@ private fun computeKotlincOptions(buildFile: BuildFile, module: ModuleDescriptor
   val kotlincOptionsName = "custom_" + module.targetName
   buildFile.target("create_kotlinc_options") {
     option("name", kotlincOptionsName)
-    if (jvmTarget != "17") {
+    if (jvmTarget != "21") {
       option("jvm_target", jvmTarget)
     }
     for ((name, value) in options.entries.sortedBy { it.key }) {

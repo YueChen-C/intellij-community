@@ -3,7 +3,6 @@ package com.intellij.ide.util.scopeChooser
 
 import com.intellij.find.FindBundle
 import com.intellij.find.impl.FindAndReplaceExecutor
-import com.intellij.ide.util.scopeChooser.ScopeChooserCombo.BrowseListener
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.EDT
@@ -47,7 +46,6 @@ class FrontendScopeChooser(private val project: Project, private val preselected
   private val editScopesButton = FixedSizeButton(comboBox).apply {
     addActionListener { editScopes() }
   }
-  private var browseListener: BrowseListener? = null
 
   init {
     comboBox.renderer = createScopeDescriptorRenderer({ descriptor -> scopeToSeparator[descriptor] }, FindBundle.message("find.usages.loading.search.scopes"))
@@ -55,7 +53,7 @@ class FrontendScopeChooser(private val project: Project, private val preselected
     comboBox.whenItemSelected {
       val scopeId = getSelectedScopeId() ?: return@whenItemSelected
       if (it.needsUserInputForScope()) {
-        FindAndReplaceExecutor.getInstance().performScopeSelection(scopeId, modelId, project)
+        FindAndReplaceExecutor.getInstance().performScopeSelection(scopeId, project)
       }
     }
 
@@ -136,17 +134,10 @@ class FrontendScopeChooser(private val project: Project, private val preselected
 
   private fun editScopes() {
     val selection = getSelectedScopeId()
-    browseListener?.onBeforeBrowseStarted()
-    ScopeModelService.getInstance(project).openEditScopesDialog(selection) { scopeId ->
+    ScopeModelService.getInstance(project).openEditScopesDialog(selection, modelId) { scopeId ->
       ApplicationManager.getApplication().invokeLater {
         scopeId?.let { selectedItem = scopesMap[it] }
-        browseListener?.onAfterBrowseFinished()
       }
     }
   }
-
-  fun setBrowseListener(browseListener: BrowseListener?) {
-    this@FrontendScopeChooser.browseListener = browseListener
-  }
-
 }

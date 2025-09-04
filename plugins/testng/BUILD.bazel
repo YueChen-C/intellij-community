@@ -66,7 +66,7 @@ jvm_library(
 jvm_library(
   name = "testng_test_lib",
   visibility = ["//visibility:public"],
-  srcs = glob(["testSources/**/*.kt", "testSources/**/*.java"], allow_empty = True),
+  srcs = glob(["testSources/**/*.kt", "testSources/**/*.java", "testSources/**/*.form"], allow_empty = True),
   associates = [":testng"],
   deps = [
     "//java/openapi:java",
@@ -79,6 +79,7 @@ jvm_library(
     "//platform/execution-impl",
     "//platform/platform-impl:ide-impl",
     "//java/debugger/impl",
+    "//java/debugger/impl:impl_test_lib",
     "//platform/indexing-api:indexing",
     "//platform/lang-core",
     "//platform/projectModel-api:projectModel",

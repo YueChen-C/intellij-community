@@ -21,16 +21,18 @@ import com.intellij.openapi.util.CheckedDisposable
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.wm.ex.ProgressIndicatorEx
 import com.intellij.platform.project.projectId
-import com.intellij.platform.scopes.ScopeModelApi
+import com.intellij.platform.scopes.ScopeModelRemoteApi
 import com.intellij.platform.util.coroutines.childScope
 import com.intellij.usages.FindUsagesProcessPresentation
 import com.intellij.usages.UsageInfo2UsageAdapter
 import com.intellij.usages.UsageInfoAdapter
+import com.intellij.util.cancelOnDispose
 import fleet.rpc.client.RpcTimeoutException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.launch
 import org.jetbrains.annotations.ApiStatus.Internal
 import java.util.function.Consumer
@@ -78,16 +80,18 @@ open class FindAndReplaceExecutorImpl(val coroutineScope: CoroutineScope) : Find
             initScope.cancel("search disposed")
           }
         }
-
+        val maxUsagesCount = ShowUsagesAction.getUsagesPageSize()
         FindRemoteApi.getInstance().findByModel(
           findModel = findModel,
           projectId = project.projectId(),
           filesToScanInitially = filesToScanInitially.map { it.rpcId() },
-          maxUsagesCount = ShowUsagesAction.getUsagesPageSize()
-        ).let {
-          if (shouldThrottle) it.throttledWithAccumulation()
-          else it.map { event -> ThrottledOneItem(event) }
-        }.collect { throttledItems ->
+          maxUsagesCount = maxUsagesCount
+        ).take(maxUsagesCount)
+          .let {
+            if (shouldThrottle) it.throttledWithAccumulation()
+            else it.map { event -> ThrottledOneItem(event) }
+          }
+          .collect { throttledItems ->
           if (searchDisposable?.isDisposed == true) {
             return@collect
           }
@@ -145,14 +149,17 @@ open class FindAndReplaceExecutorImpl(val coroutineScope: CoroutineScope) : Find
     }
   }
 
-  override fun performScopeSelection(scopeId: String, scopesModelId: String, project: Project) {
+  override fun performScopeSelection(scopeId: String, project: Project) {
     selectScopeJob = coroutineScope.launch {
-      try {
-       ScopeModelApi.getInstance().performScopeSelection(scopeId, scopesModelId,project.projectId())
+      val deferred = try {
+       ScopeModelRemoteApi.getInstance().performScopeSelection(scopeId, project.projectId())
       }
       catch (e: RpcTimeoutException) {
         LOG.warn("Failed to select scope", e)
+        null
       }
+      deferred?.cancelOnDispose(project)
+      deferred?.await()
     }
   }
 

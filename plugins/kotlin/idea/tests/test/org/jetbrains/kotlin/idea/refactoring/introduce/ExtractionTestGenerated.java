@@ -1638,6 +1638,16 @@ public abstract class ExtractionTestGenerated extends AbstractExtractionTest {
                 runTest("testData/refactoring/extractFunction/contextParameters/multipleParameters.kt");
             }
 
+            @TestMetadata("multipleParametersOneCall.kt")
+            public void testMultipleParametersOneCall() throws Exception {
+                runTest("testData/refactoring/extractFunction/contextParameters/multipleParametersOneCall.kt");
+            }
+
+            @TestMetadata("multipleParametersOnePropertyAccess.kt")
+            public void testMultipleParametersOnePropertyAccess() throws Exception {
+                runTest("testData/refactoring/extractFunction/contextParameters/multipleParametersOnePropertyAccess.kt");
+            }
+
             @TestMetadata("parameterizedContextParameters.kt")
             public void testParameterizedContextParameters() throws Exception {
                 runTest("testData/refactoring/extractFunction/contextParameters/parameterizedContextParameters.kt");
@@ -4385,6 +4395,11 @@ public abstract class ExtractionTestGenerated extends AbstractExtractionTest {
             @TestMetadata("overrideFunction.kt")
             public void testOverrideFunction() throws Exception {
                 runTest("testData/refactoring/introduceParameter/overrideFunction.kt");
+            }
+
+            @TestMetadata("parametersInExtraction.kt")
+            public void testParametersInExtraction() throws Exception {
+                runTest("testData/refactoring/introduceParameter/parametersInExtraction.kt");
             }
 
             @TestMetadata("partialSubstitution.kt")

@@ -100,6 +100,7 @@ android/design-plugin/descriptor
 android/designer
 android/designer-perf-tests
 android/designer/customview
+android/designer/gradle
 android/device-explorer
 android/device-explorer-common
 android/device-explorer-files
@@ -334,8 +335,10 @@ jvm/jvm-analysis-refactoring
 jvm/jvm-analysis-testFramework
 libraries/ai.grazie.spell.gec.engine.local
 libraries/assertj-core
+libraries/coil
 libraries/compose-foundation-desktop
 libraries/compose-foundation-desktop-junit
+libraries/compose-runtime-desktop
 libraries/detekt-compose-rules
 libraries/dokka
 libraries/grpc
@@ -485,7 +488,6 @@ platform/jewel/markdown/extensions/gfm-tables
 platform/jewel/markdown/extensions/images
 platform/jewel/markdown/ide-laf-bridge-styling
 platform/jewel/markdown/int-ui-standalone-styling
-platform/jewel/samples/ide-plugin
 platform/jewel/samples/showcase
 platform/jewel/samples/standalone
 platform/jewel/ui
@@ -630,10 +632,12 @@ platform/testFramework
 platform/testFramework/bootstrap
 platform/testFramework/common
 platform/testFramework/core
+platform/testFramework/eelJava
 platform/testFramework/extensions
 platform/testFramework/impl
 platform/testFramework/junit5
 platform/testFramework/junit5.jimfs
+platform/testFramework/junit5/codeInsight
 platform/testFramework/junit5/eel
 platform/testFramework/junit5/highlighting
 platform/testFramework/junit5/projectStructure
@@ -705,7 +709,6 @@ platform/xdebugger-testFramework
 plugins/ByteCodeViewer
 plugins/IntelliLang
 plugins/IntelliLang/backend
-plugins/IntelliLang/plugin
 plugins/IntelliLang/tests
 plugins/ant
 plugins/ant/jps-plugin
@@ -758,6 +761,7 @@ plugins/devkit/devkit-java-tests
 plugins/devkit/devkit-kotlin-fir-tests
 plugins/devkit/devkit-kotlin-tests
 plugins/devkit/devkit-tests
+plugins/devkit/intellij.devkit.compose
 plugins/devkit/intellij.devkit.debugger
 plugins/devkit/intellij.devkit.git
 plugins/devkit/intellij.devkit.gradle
@@ -777,6 +781,7 @@ plugins/devkit/intellij.kotlin.devkit
 plugins/devkit/intellij.kotlin.devkit/k1
 plugins/devkit/intellij.kotlin.devkit/k2
 plugins/devkit/jps-plugin
+plugins/devkit/runtimeModuleRepository/generator
 plugins/devkit/runtimeModuleRepository/jps
 plugins/eclipse
 plugins/eclipse/common-eclipse-util
@@ -1233,6 +1238,8 @@ plugins/space/jps-plugin
 plugins/stats-collector
 plugins/stream-debugger
 plugins/stream-debugger-core
+plugins/stream-debugger-core/intellij.debugger.streams.backend
+plugins/stream-debugger-core/intellij.debugger.streams.shared
 plugins/stream-debugger-core/testFramework
 plugins/svn4idea
 plugins/tasks/tasks-api
@@ -1366,5 +1373,6 @@ xml/xml-psi-api
 xml/xml-psi-impl
 xml/xml-structure-view-api
 xml/xml-structure-view-impl
+xml/xml-syntax
 xml/xml-ui-common
 xml/xmlbeans

@@ -6,7 +6,7 @@ import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.util.Condition
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
-import org.jetbrains.plugins.terminal.block.reworked.lang.TerminalOutputLanguage
+import org.jetbrains.plugins.terminal.block.reworked.lang.TerminalOutputElement
 
 /**
  * Replaces the default text selection logic invoked on double-click in the terminal editor.
@@ -59,5 +59,5 @@ internal class TerminalWordSelectionFilter : Condition<PsiElement> {
 }
 
 private fun isTerminalPsiElement(e: PsiElement): Boolean {
-  return e.node?.elementType?.language == TerminalOutputLanguage
+  return e is TerminalOutputElement
 }

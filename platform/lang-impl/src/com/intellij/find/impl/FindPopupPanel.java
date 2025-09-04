@@ -1231,10 +1231,12 @@ public final class FindPopupPanel extends JBPanel<FindPopupPanel> implements Fin
 
         projectExecutor.findUsages(project, myResultsPreviewSearchProgress, processPresentation, findModel, previousUsages,
                                    !myResultsPreviewTable.isEmpty(), myDisposable, (adapter) -> {
-            Map<Integer, Usage> selectedUsages = getSelectedUsages();
-            if (selectedUsages != null && selectedUsages.containsValue(adapter)) {
-              myPreviewUpdater.addRequest(updatePreviewRunnable, 50);
-            }
+            ApplicationManager.getApplication().invokeLater(() -> {
+              Map<Integer, Usage> selectedUsages = getSelectedUsages();
+              if (selectedUsages != null && selectedUsages.containsValue(adapter)) {
+                myPreviewUpdater.addRequest(updatePreviewRunnable, 50);
+              }
+            });
           }, (usage) -> {
           if (isCancelled()) {
             onStop(hash);
@@ -1338,14 +1340,17 @@ public final class FindPopupPanel extends JBPanel<FindPopupPanel> implements Fin
 
       public void onFinish() {
         ApplicationManager.getApplication().invokeLater(() -> {
+          boolean isEmpty = resultsCount.get() == 0;
+
           if (!isCancelled()) {
-            boolean isEmpty = resultsCount.get() == 0;
             if (isEmpty) {
               showEmptyText(FindBundle.message("message.nothingFound"), true);
             }
           }
           FindUsagesCollector.recordSearchFinished(System.currentTimeMillis() - startTime.get(), resultsCount.get(), ShowUsagesAction.getUsagesPageSize());
           onStop(hash);
+
+          myHelper.onSearchFinish(isEmpty ? 0 : myResultsPreviewTable.getRowCount());
         }, state);
       }
     }, myResultsPreviewSearchProgress);
@@ -1570,7 +1575,6 @@ public final class FindPopupPanel extends JBPanel<FindPopupPanel> implements Fin
       if (backendValidator.isFinished) {
         header.loadingIcon.setIcon(EmptyIcon.ICON_16);
       }
-      myHelper.onSearchStop();
     });
   }
 
@@ -1725,12 +1729,7 @@ public final class FindPopupPanel extends JBPanel<FindPopupPanel> implements Fin
     for (int i = rows.length - 1; i >= 0; i--) {
       int row = rows[i];
       Object valueAt;
-      try {
-        valueAt = myResultsPreviewTable.getModel().getValueAt(row, 0);
-      } catch (ArrayIndexOutOfBoundsException e) {
-        LOG.debug("Error getting value at row " + row, e);
-        return result;
-      }
+      valueAt = myResultsPreviewTable.getModel().getValueAt(row, 0);
       if (valueAt instanceof FindPopupItem) {
         if (result == null) result = new LinkedHashMap<>();
         result.put(row, ((FindPopupItem)valueAt).getUsage());

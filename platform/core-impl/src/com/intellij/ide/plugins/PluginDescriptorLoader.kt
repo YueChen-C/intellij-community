@@ -235,7 +235,13 @@ fun loadPluginSubDescriptors(
       }
       val subDescriptor = descriptor.createContentModule(subRaw, subDescriptorFile, module)
       if (subRaw.`package` == null || subRaw.isSeparateJar) {
-        subDescriptor.jarFiles = Collections.singletonList(pluginDir.resolve("lib/modules/${module.moduleId}.jar"))
+        val customRoots = pathResolver.resolveCustomModuleClassesRoots(module.moduleId)
+        if (customRoots.isNotEmpty()) {
+          subDescriptor.jarFiles = customRoots
+        }
+        else {
+          subDescriptor.jarFiles = Collections.singletonList(pluginDir.resolve("lib/modules/${module.moduleId}.jar"))
+        }
       }
       module.assignDescriptor(subDescriptor)
     }
@@ -908,6 +914,7 @@ fun isProductWithTheOnlyDescriptor(platformPrefix: String): Boolean =
   platformPrefix == PlatformUtils.IDEA_PREFIX ||
   platformPrefix == PlatformUtils.WEB_PREFIX ||
   platformPrefix == PlatformUtils.DBE_PREFIX ||
+  platformPrefix == PlatformUtils.DATASPELL_PREFIX ||
   platformPrefix == PlatformUtils.GATEWAY_PREFIX ||
   platformPrefix == PlatformUtils.GIT_CLIENT_PREFIX
 

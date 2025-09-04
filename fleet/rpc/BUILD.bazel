@@ -18,7 +18,7 @@ jvm_library(
   name = "rpc",
   module_name = "fleet.rpc",
   visibility = ["//visibility:public"],
-  srcs = glob(["srcCommonMain/**/*.kt", "srcCommonMain/**/*.java"], allow_empty = True, exclude = ["**/module-info.java"]),
+  srcs = glob(["srcCommonMain/**/*.kt", "srcCommonMain/**/*.java", "srcCommonMain/**/*.form"], allow_empty = True, exclude = ["**/module-info.java"]),
   kotlinc_opts = ":custom_rpc",
   exported_compiler_plugins = ["@lib//:rpc-plugin"],
   deps = [
@@ -32,7 +32,6 @@ jvm_library(
     "@lib//:kotlinx-coroutines-core",
     "@lib//:kotlinx-datetime-jvm",
     "//fleet/util/core",
-  ],
-  plugins = ["@lib//:rpc-plugin"]
+  ]
 )
 ### auto-generated section `build fleet.rpc` end

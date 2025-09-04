@@ -86,22 +86,22 @@ public class CodeCompletionHandlerBase {
 
   private final Tracer completionTracer = TelemetryManager.getInstance().getTracer(CodeCompletion);
 
-  public static CodeCompletionHandlerBase createHandler(@NotNull CompletionType completionType) {
+  public static @NotNull CodeCompletionHandlerBase createHandler(@NotNull CompletionType completionType) {
     return createHandler(completionType, true, false, true);
   }
 
-  public static CodeCompletionHandlerBase createHandler(@NotNull CompletionType completionType,
-                                                        boolean invokedExplicitly,
-                                                        boolean autopopup,
-                                                        boolean synchronous) {
+  public static @NotNull CodeCompletionHandlerBase createHandler(@NotNull CompletionType completionType,
+                                                                 boolean invokedExplicitly,
+                                                                 boolean autopopup,
+                                                                 boolean synchronous) {
     return createHandler(completionType, invokedExplicitly, autopopup, synchronous, "CodeCompletion");
   }
 
-  public static CodeCompletionHandlerBase createHandler(@NotNull CompletionType completionType,
-                                                        boolean invokedExplicitly,
-                                                        boolean autopopup,
-                                                        boolean synchronous,
-                                                        String actionId) {
+  public static @NotNull CodeCompletionHandlerBase createHandler(@NotNull CompletionType completionType,
+                                                                 boolean invokedExplicitly,
+                                                                 boolean autopopup,
+                                                                 boolean synchronous,
+                                                                 @NotNull String actionId) {
     AnAction codeCompletionAction = ActionManager.getInstance().getAction(actionId);
     if (codeCompletionAction instanceof OverridingAction) {
       codeCompletionAction = ((ActionManagerImpl)ActionManager.getInstance()).getBaseAction((OverridingAction)codeCompletionAction);
@@ -280,7 +280,7 @@ public class CodeCompletionHandlerBase {
   }
 
   @ApiStatus.Internal
-  protected void doComplete(CompletionInitializationContextImpl initContext,
+  protected void doComplete(@NotNull CompletionInitializationContextImpl initContext,
                             boolean hasModifiers,
                             boolean isValidContext,
                             long startingTime) {
@@ -320,8 +320,8 @@ public class CodeCompletionHandlerBase {
     scheduleContributorsAfterAsyncCommit(initContext, indicator, hasModifiers);
   }
 
-  private void scheduleContributorsAfterAsyncCommit(CompletionInitializationContextImpl initContext,
-                                                    CompletionProgressIndicator indicator,
+  private void scheduleContributorsAfterAsyncCommit(@NotNull CompletionInitializationContextImpl initContext,
+                                                    @NotNull CompletionProgressIndicator indicator,
                                                     boolean hasModifiers) {
     CompletionPhase phase;
     if (synchronous) {
@@ -349,10 +349,17 @@ public class CodeCompletionHandlerBase {
       .submit(AppExecutorUtil.getAppExecutorService());
   }
 
-  private void trySynchronousCompletion(CompletionInitializationContextImpl initContext,
+  /**
+   * Tries to perform completion synchronously:
+   * 1. It starts inferencing candidates (synchornously or asynchronously)
+   * 2. It waits for them to be computed for the given timeout.
+   * 3. If candidates are computed until timeout, the UI is updated immediately, otherwise computation continues and the phase is set to BgCalculation.
+   */
+  private void trySynchronousCompletion(@NotNull CompletionInitializationContextImpl initContext,
                                         boolean hasModifiers,
                                         long startingTime,
-                                        CompletionProgressIndicator indicator, OffsetsInFile hostCopyOffsets) {
+                                        @NotNull CompletionProgressIndicator indicator,
+                                        @NotNull OffsetsInFile hostCopyOffsets) {
     CompletionServiceImpl.setCompletionPhase(new CompletionPhase.Synchronous(indicator));
 
     var future = startContributorThread(initContext, indicator, hostCopyOffsets, hasModifiers);
@@ -363,6 +370,7 @@ public class CodeCompletionHandlerBase {
     int timeout = calcSyncTimeOut(startingTime);
     if (indicator.blockingWaitForFinish(timeout)) {
       if (ApplicationManager.getApplication().isUnitTestMode()) {
+        //noinspection TestOnlyProblems
         checkForExceptions(future);
       }
       try {
@@ -381,9 +389,9 @@ public class CodeCompletionHandlerBase {
     indicator.showLookup();
   }
 
-  private @Nullable Deferred<?> startContributorThread(CompletionInitializationContextImpl initContext,
-                                                       CompletionProgressIndicator indicator,
-                                                       OffsetsInFile hostCopyOffsets,
+  private @Nullable Deferred<?> startContributorThread(@NotNull CompletionInitializationContextImpl initContext,
+                                                       @NotNull CompletionProgressIndicator indicator,
+                                                       @NotNull OffsetsInFile hostCopyOffsets,
                                                        boolean hasModifiers) {
     if (!hostCopyOffsets.getFile().isValid()) {
       completionFinished(indicator, hasModifiers);
@@ -392,6 +400,7 @@ public class CodeCompletionHandlerBase {
 
     ApplicationManager.getApplication().getMessageBus().syncPublisher(CompletionContributorListener.TOPIC)
       .beforeCompletionContributorThreadStarted(indicator, initContext);
+
     return indicator.getCompletionThreading()
       .startThread(indicator, Context.current().wrap(() -> {
         CompletionThreadingKt.tryReadOrCancel(indicator, Context.current().wrap(() -> {
@@ -465,7 +474,7 @@ public class CodeCompletionHandlerBase {
            offsetMap.getOffset(CompletionInitializationContext.SELECTION_END_OFFSET);
   }
 
-  protected void completionFinished(final CompletionProgressIndicator indicator, boolean hasModifiers) {
+  protected void completionFinished(@NotNull CompletionProgressIndicator indicator, boolean hasModifiers) {
     List<LookupElement> items = indicator.getLookup().getItems();
     if (items.isEmpty()) {
       LookupManager.hideActiveLookup(indicator.getProject());
@@ -805,7 +814,7 @@ public class CodeCompletionHandlerBase {
     return settings.AUTOCOMPLETE_ON_CODE_COMPLETION;
   }
 
-  private static Runnable rememberDocumentState(final Editor _editor) {
+  private static @NotNull Runnable rememberDocumentState(final Editor _editor) {
     final Editor editor = InjectedLanguageEditorUtil.getTopLevelEditor(_editor);
     final String documentText = editor.getDocument().getText();
     final int caret = editor.getCaretModel().getOffset();

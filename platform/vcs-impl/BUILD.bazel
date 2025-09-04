@@ -74,6 +74,7 @@ jvm_library(
     "//platform/platform-impl/concurrency",
     "//platform/project/shared:project",
     "//platform/kernel/backend",
+    "//platform/platform-impl/rpc",
   ],
   runtime_deps = [":vcs-impl_resources"]
 )
@@ -81,7 +82,7 @@ jvm_library(
 jvm_library(
   name = "vcs-impl_test_lib",
   visibility = ["//visibility:public"],
-  srcs = glob(["testSrc/**/*.kt", "testSrc/**/*.java"], allow_empty = True),
+  srcs = glob(["testSrc/**/*.kt", "testSrc/**/*.java", "testSrc/**/*.form"], allow_empty = True),
   associates = [":vcs-impl"],
   deps = [
     "//platform/analysis-api:analysis",
@@ -154,6 +155,8 @@ jvm_library(
     "//platform/platform-impl/concurrency",
     "//platform/project/shared:project",
     "//platform/kernel/backend",
+    "//platform/platform-impl/rpc",
+    "//platform/diff-impl/tests:tests_test_lib",
   ],
   runtime_deps = [":vcs-impl_resources"]
 )

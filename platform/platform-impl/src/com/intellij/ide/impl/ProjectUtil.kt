@@ -18,6 +18,7 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.components.serviceAsync
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.diagnostic.debug
+import com.intellij.openapi.diagnostic.trace
 import com.intellij.openapi.fileChooser.impl.FileChooserUtil
 import com.intellij.openapi.progress.blockingContext
 import com.intellij.openapi.progress.runBlockingMaybeCancellable
@@ -34,6 +35,7 @@ import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.util.io.FileUtilRt
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.wm.IdeFrame
 import com.intellij.openapi.wm.ToolWindowId
@@ -488,8 +490,15 @@ object ProjectUtil {
   @JvmStatic
   @RequiresEdt
   fun focusProjectWindow(project: Project?, stealFocusIfAppInactive: Boolean = false) {
-    val frame = WindowManager.getInstance().getFrame(project) ?: return
+    LOG.trace { "focusProjectWindow: project=$project stealFocusIfAppInactive=$stealFocusIfAppInactive" }
+
+    val frame = WindowManager.getInstance().getFrame(project) ?: run {
+      LOG.trace { "focusProjectWindow: unable to get frame for project" }
+      return
+    }
     val appIsActive = getActiveWindow() != null
+
+    LOG.trace { "focusProjectWindow: appIsActive=$appIsActive" }
 
     // On macOS, `j.a.Window#toFront` restores the frame if needed.
     // On X Window, restoring minimized frame can steal focus from an active application, so we do it only when the IDE is active.
@@ -698,7 +707,7 @@ object ProjectUtil {
   fun getProjectForComponent(component: Component?): Project? = getProjectForWindow(ComponentUtil.getWindow(component))
 
   @JvmStatic
-  fun getActiveProject(): Project? = getProjectForWindow(getActiveWindow())
+  fun getActiveProject(): Project? = getProjectForWindow(getActiveWindow())?.takeIf { !it.isDisposed }
 
   @JvmStatic
   fun getOpenProjects(): Array<Project> = ProjectUtilCore.getOpenProjects()
@@ -716,13 +725,15 @@ object ProjectUtil {
 
     val project = if (canAttach) {
       val options = createOptionsToOpenDotIdeaOrCreateNewIfNotExists(file, currentProject).copy(
-        forceReuseFrame = forceReuseFrame
-      )
+        forceReuseFrame = forceReuseFrame,
+        projectRootDir = file,
+        )
       (serviceAsync<ProjectManager>() as ProjectManagerEx).openProjectAsync(file, options)
     }
     else {
       val options = OpenProjectTask().withProjectToClose(currentProject).copy(
-        forceReuseFrame = forceReuseFrame
+        forceReuseFrame = forceReuseFrame,
+        projectRootDir = file,
       )
       openOrImportAsync(file, options)
     }
@@ -765,6 +776,6 @@ fun <T> runUnderModalProgressIfIsEdt(task: suspend CoroutineScope.() -> T): T {
 
 private fun getActiveWindow(): Window? {
   val window = KeyboardFocusManager.getCurrentKeyboardFocusManager().activeWindow
-  if (window is DisposableWindow && window.isWindowDisposed) return null
+  LOG.trace { "getActiveWindow: active window is $window" }
   return window
 }

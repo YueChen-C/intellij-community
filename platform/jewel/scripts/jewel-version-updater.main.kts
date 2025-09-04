@@ -49,7 +49,7 @@ private val jewelApiVersionTemplate =
     |
     |/** The Jewel API version for this build, expressed as a string. E.g.: "0.30.0" */
     |public val JewelBuild.apiVersionString: String
-    |    get() = "0.29.0"
+    |    get() = "%%JEWEL_VERSION%%"
     |
     """
         .trimMargin()
@@ -61,6 +61,7 @@ print("⏳ Locating Jewel folder...")
 private val jewelDir = findJewelRoot()
 
 if (jewelDir == null || !jewelDir.isDirectory) {
+    println()
     printlnErr("Could not find the Jewel folder. Please make sure you're running the script from somewhere inside it.")
     exitProcess(1)
 }
